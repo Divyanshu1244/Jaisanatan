@@ -70,8 +70,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
                         if m and hasattr(m, 'message_id'):
                             sent_msgs.append(m.message_id)
-                    # Fixed: parse_mode remove kiya to avoid parse error
-                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 Minutes.", parse_mode=None)
+                    # Updated: 10 seconds delete time
+                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 10 seconds.", parse_mode=None)
                     sent_msgs.append(note.message_id)
                     context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
@@ -122,8 +122,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
                         if m and hasattr(m, 'message_id'):
                             sent_msgs.append(m.message_id)
-                    # Fixed: parse_mode remove kiya
-                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
+                    # Updated: 10 seconds delete time
+                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 10 seconds.", parse_mode=None)
                     sent_msgs.append(note.message_id)
                     context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
@@ -167,18 +167,23 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# /revoke command
+# /revoke command (updated for full link support)
 async def revoke(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
         await update.message.reply_text("❌ You are not authorized to use this command.")
     else:
         if context.args:
-            media_id = context.args[0]
+            arg = context.args[0]
+            # Extract media_id if full link diya gaya
+            if arg.startswith("https://"):
+                media_id = arg.split("start=")[-1]  # Extract after start=
+            else:
+                media_id = arg
             delete_data(media_id)
             await update.message.reply_text(f"✅ Link revoked! Media ID {media_id} deleted from database.")
         else:
-            await update.message.reply_text("❌ Usage: /revoke <media_id>")
+            await update.message.reply_text("❌ Usage: /revoke <media_id> or full link")
 
 # Callback handler
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -231,16 +236,19 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await update.message.reply_text("❌ Unsupported input. Please send media files only.")
 
-# Tere /delete_messages
+# Tere /delete_messages (updated with logging)
 async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_id = data.get("user_id")
     msg_ids = data.get("message_ids", [])
+    media_id = data.get("media_id")
+    print(f"Starting delete job for user {user_id}, messages: {msg_ids}")  # Log add kiya
     for mid in msg_ids:
         try:
             await context.bot.delete_message(chat_id=user_id, message_id=mid)
-        except Exception:
-            pass
+            print(f"Deleted message {mid} for user {user_id}")  # Success log
+        except Exception as e:
+            print(f"Failed to delete message {mid} for user {user_id}: {e}")  # Error log
     try:
         await context.bot.send_message(
             chat_id=user_id,
@@ -249,8 +257,9 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
                 "inline_keyboard": [[{"text": "📢 Join Backup Channel", "url": PRIVATE_INVITE_LINK}]]
             }
         )
-    except Exception:
-        pass
+        print(f"Sent backup channel message to {user_id}")  # Log
+    except Exception as e:
+        print(f"Failed to send backup message to {user_id}: {e}")
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
