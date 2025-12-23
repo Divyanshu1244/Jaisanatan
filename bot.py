@@ -10,8 +10,8 @@ PRIVATE_CHANNEL = "-1003440235355"
 PRIVATE_INVITE_LINK = "https://t.me/+FkReusMf7r44Nzhl"
 MAIN_CHANNEL_LINK = "https://t.me/+_FVPR7qaQuRhYmY1"
 
-# MongoDB connection (tere URL)
-MONGO_URL = "mongodb+srv://sanjublogscom_db_user:<db_password>@cluster0.cwi48dt.mongodb.net/?appName=Cluster0"  # Password replace kar
+# MongoDB connection (tere URL with password)
+MONGO_URL = "mongodb+srv://sanjublogscom_db_user:Mahakal456@cluster0.cwi48dt.mongodb.net/?appName=Cluster0"
 client = pymongo.MongoClient(MONGO_URL)
 db = client['botdb']
 files_collection = db['files']
@@ -70,13 +70,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
                         if m and hasattr(m, 'message_id'):
                             sent_msgs.append(m.message_id)
-                    note = await update.message.reply_text("⚠️ <b>Note:</b> Files will be deleted after <b>30 Minutes</b>.", parse_mode="html")
+                    # Fixed: parse_mode remove kiya to avoid parse error
+                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 Minutes.", parse_mode=None)
                     sent_msgs.append(note.message_id)
                     context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
                 await update.message.reply_text(
-                    "🚫 <b>Phele channel Join to karle babu !</b>\n\n Friends ko bhi refer kar diyo 😋",
-                    parse_mode="html",
+                    "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
                     reply_markup={
                         "inline_keyboard": [
                             [{"text": "📢 Join Channel", "url": MAIN_CHANNEL_LINK}],
@@ -122,13 +122,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
                         if m and hasattr(m, 'message_id'):
                             sent_msgs.append(m.message_id)
-                    note = await update.message.reply_text("⚠️ <b>Note:</b> Files will be deleted after <b>30 minutes</b>.", parse_mode="html")
+                    # Fixed: parse_mode remove kiya
+                    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
                     sent_msgs.append(note.message_id)
                     context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
                 await update.message.reply_text(
-                    "🚫 <b>Phele channel Join to karle babu !</b>\n\n Friends ko bhi refer kar diyo 😋",
-                    parse_mode="html",
+                    "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
                     reply_markup={
                         "inline_keyboard": [
                             [{"text": "📢 Join Main Channel", "url": MAIN_CHANNEL_LINK}],
@@ -167,7 +167,7 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# /revoke command (new feature)
+# /revoke command
 async def revoke(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
@@ -244,7 +244,7 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.bot.send_message(
             chat_id=user_id,
-            text="Join our backup channel ️💔",
+            text="Join our backup channel 💔",
             reply_markup={
                 "inline_keyboard": [[{"text": "📢 Join Backup Channel", "url": PRIVATE_INVITE_LINK}]]
             }
@@ -256,7 +256,7 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("upload", upload))
-    application.add_handler(CommandHandler("revoke", revoke))  # New revoke handler
+    application.add_handler(CommandHandler("revoke", revoke))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
     application.run_polling()
