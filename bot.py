@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = [6335046711, 8552084416]
@@ -181,11 +181,19 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# Tere /handle_media (updated, message handler)
+# Callback handler for button (Prob 2 fix)
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "/upload":
+        await upload(update, context)  # /upload execute kar
+
+# Tere /handle_media (updated, message handler) - Prob 1 fix: Normal text pe response remove
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
+        # Normal text pe koi response mat kar (silent)
+        return
     else:
         media_id = context.user_data.get('upload_media_id')
         files = context.user_data.get('upload_files', [])
@@ -251,6 +259,7 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("upload", upload))
+    application.add_handler(CallbackQueryHandler(handle_callback))  # Button handler add kiya
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
     application.run_polling()
 
