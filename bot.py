@@ -73,7 +73,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Fixed: parse_mode remove kiya to avoid parse error
                     note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 Minutes.", parse_mode=None)
                     sent_msgs.append(note.message_id)
-                    context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
+                    context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
                 await update.message.reply_text(
                     "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
@@ -125,7 +125,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     # Fixed: parse_mode remove kiya
                     note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
                     sent_msgs.append(note.message_id)
-                    context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
+                    context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
                 await update.message.reply_text(
                     "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
