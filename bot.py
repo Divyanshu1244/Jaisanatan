@@ -7,7 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = [6335046711, 8552084416]
 PUBLIC_CHANNEL = "-1003582278269"  # Tere main channel ID
-PRIVATE_CHANNEL = "-1003582278269"  # Backup channel ID
+PRIVATE_CHANNEL = "-1003440235355"  # Backup channel ID
 PRIVATE_INVITE_LINK = "https://t.me/+FkReusMf7r44Nzhl"
 MAIN_CHANNEL_LINK = "https://t.me/+_FVPR7qaQuRhYmY1"
 
