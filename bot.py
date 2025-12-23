@@ -159,7 +159,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.",
                 parse_mode="html",
                 reply_markup={
-                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "/upload"}]]
+                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]  # Changed to "upload" without /
                 }
             )
         else:
@@ -181,18 +181,19 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# Callback handler for button (Prob 2 fix)
+# Callback handler for button (Prob 2 fix - updated)
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    if query.data == "/upload":
-        await upload(update, context)  # /upload execute kar
+    await query.answer()  # Must answer the callback
+    if query.data == "upload":  # Match the callback_data
+        # Simulate /upload command
+        await upload(update, context)
 
 # Tere /handle_media (updated, message handler) - Prob 1 fix: Normal text pe response remove
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
-        # Normal text pe koi response mat kar (silent)
+        # Normal text pe koi response mat kar (silent) - Prob 1 solved
         return
     else:
         media_id = context.user_data.get('upload_media_id')
@@ -259,7 +260,7 @@ def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("upload", upload))
-    application.add_handler(CallbackQueryHandler(handle_callback))  # Button handler add kiya
+    application.add_handler(CallbackQueryHandler(handle_callback))  # Button handler
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
     application.run_polling()
 
