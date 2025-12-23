@@ -98,7 +98,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 )
         except Exception as e:
-            await update.message.reply_text("❌ Error checking subscription. Ensure bot is admin in both channels.")
+            # Error ko log kar, par user ko message mat bhej (files already sent ho sakti hain)
+            print(f"Subscription check error: {e}")  # Logs mein dekh
     elif params and params.startswith("joined_"):
         media_id = params.split("_")[1]
         user_id = user.id
@@ -150,7 +151,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 )
         except Exception as e:
-            await update.message.reply_text("❌ Error checking subscription. Ensure bot is admin in both channels.")
+            # Error ko log kar, par user ko message mat bhej
+            print(f"Subscription check error: {e}")
     else:
         if user.id in ADMIN_ID:
             await update.message.reply_text(
