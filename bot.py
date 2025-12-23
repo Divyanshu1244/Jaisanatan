@@ -1,48 +1,37 @@
 import os
-import sqlite3
-from datetime import datetime
+import pymongo
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = [6335046711, 8552084416]
-PUBLIC_CHANNEL = "-1003582278269"  # Tere main channel ID
-PRIVATE_CHANNEL = "-1003440235355"  # Backup channel ID
+PUBLIC_CHANNEL = "-1003582278269"
+PRIVATE_CHANNEL = "-1003440235355"
 PRIVATE_INVITE_LINK = "https://t.me/+FkReusMf7r44Nzhl"
 MAIN_CHANNEL_LINK = "https://t.me/+_FVPR7qaQuRhYmY1"
 
-# DB functions for files (Bot.getData/Bot.saveData replace)
-def init_db():
-    conn = sqlite3.connect('bot_files.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS files (
-                    media_id TEXT PRIMARY KEY,
-                    data TEXT
-                )''')
-    conn.commit()
-    conn.close()
+# MongoDB connection (tere URL)
+MONGO_URL = "mongodb+srv://sanjublogscom_db_user:<db_password>@cluster0.cwi48dt.mongodb.net/?appName=Cluster0"  # Password replace kar
+client = pymongo.MongoClient(MONGO_URL)
+db = client['botdb']
+files_collection = db['files']
 
+# DB functions
 def save_data(media_id, files):
-    conn = sqlite3.connect('bot_files.db')
-    c = conn.cursor()
-    import json
-    c.execute('INSERT OR REPLACE INTO files (media_id, data) VALUES (?, ?)',
-              (media_id, json.dumps(files)))
-    conn.commit()
-    conn.close()
+    files_collection.update_one(
+        {'media_id': media_id},
+        {'$set': {'media_id': media_id, 'data': files}},
+        upsert=True
+    )
 
 def get_data(media_id):
-    conn = sqlite3.connect('bot_files.db')
-    c = conn.cursor()
-    c.execute('SELECT data FROM files WHERE media_id = ?', (media_id,))
-    result = c.fetchone()
-    conn.close()
-    if result:
-        import json
-        return json.loads(result[0])
-    return None
+    result = files_collection.find_one({'media_id': media_id})
+    return result['data'] if result else None
 
-# Tere /start command (updated for Railway)
+def delete_data(media_id):
+    files_collection.delete_one({'media_id': media_id})
+
+# Tere /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     params = ' '.join(context.args) if context.args else None
@@ -83,7 +72,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             sent_msgs.append(m.message_id)
                     note = await update.message.reply_text("⚠️ <b>Note:</b> Files will be deleted after <b>30 Minutes</b>.", parse_mode="html")
                     sent_msgs.append(note.message_id)
-                    # Delete after 30 min
                     context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
             else:
                 await update.message.reply_text(
@@ -98,8 +86,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 )
         except Exception as e:
-            # Error ko log kar, par user ko message mat bhej (files already sent ho sakti hain)
-            print(f"Subscription check error: {e}")  # Logs mein dekh
+            print(f"Subscription check error: {e}")
     elif params and params.startswith("joined_"):
         media_id = params.split("_")[1]
         user_id = user.id
@@ -151,15 +138,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     }
                 )
         except Exception as e:
-            # Error ko log kar, par user ko message mat bhej
             print(f"Subscription check error: {e}")
     else:
         if user.id in ADMIN_ID:
             await update.message.reply_text(
-                "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.",
+                "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.\nUse /revoke <media_id> to delete a link.",
                 parse_mode="html",
                 reply_markup={
-                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]  # Fixed callback_data
+                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]
                 }
             )
         else:
@@ -168,7 +154,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML"
             )
 
-# Tere /upload command (updated)
+# Tere /upload command
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
@@ -176,25 +162,36 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         keyboard = ReplyKeyboardMarkup([["✅"]], resize_keyboard=True)
         import uuid
-        media_id = str(uuid.uuid4())  # Unique ID generate
+        media_id = str(uuid.uuid4())
         context.user_data['upload_media_id'] = media_id
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# Callback handler for button (Prob 2 fix - final)
+# /revoke command (new feature)
+async def revoke(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id not in ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized to use this command.")
+    else:
+        if context.args:
+            media_id = context.args[0]
+            delete_data(media_id)
+            await update.message.reply_text(f"✅ Link revoked! Media ID {media_id} deleted from database.")
+        else:
+            await update.message.reply_text("❌ Usage: /revoke <media_id>")
+
+# Callback handler
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Must answer to avoid timeout
+    await query.answer()
     if query.data == "upload":
-        # Trigger /upload command
         await upload(update, context)
 
-# Tere /handle_media (updated, message handler) - Prob 1 fix: Normal text pe response remove
+# Tere /handle_media
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user.id not in ADMIN_ID:
-        # Normal text pe koi response mat kar (silent) - Prob 1 solved
-        return
+        return  # Silent
     else:
         media_id = context.user_data.get('upload_media_id')
         files = context.user_data.get('upload_files', [])
@@ -234,7 +231,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await update.message.reply_text("❌ Unsupported input. Please send media files only.")
 
-# Tere /delete_messages (updated, job function)
+# Tere /delete_messages
 async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_id = data.get("user_id")
@@ -256,11 +253,11 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
         pass
 
 def main():
-    init_db()
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("upload", upload))
-    application.add_handler(CallbackQueryHandler(handle_callback))  # Button handler
+    application.add_handler(CommandHandler("revoke", revoke))  # New revoke handler
+    application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
     application.run_polling()
 
