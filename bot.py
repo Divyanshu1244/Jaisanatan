@@ -159,7 +159,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.",
                 parse_mode="html",
                 reply_markup={
-                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]  # Changed to "upload" without /
+                    "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]  # Fixed callback_data
                 }
             )
         else:
@@ -181,12 +181,12 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['upload_files'] = []
         await update.message.reply_text("👉 Send me the media you want to upload. When you are done, type ✅.", reply_markup=keyboard)
 
-# Callback handler for button (Prob 2 fix - updated)
+# Callback handler for button (Prob 2 fix - final)
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Must answer the callback
-    if query.data == "upload":  # Match the callback_data
-        # Simulate /upload command
+    await query.answer()  # Must answer to avoid timeout
+    if query.data == "upload":
+        # Trigger /upload command
         await upload(update, context)
 
 # Tere /handle_media (updated, message handler) - Prob 1 fix: Normal text pe response remove
