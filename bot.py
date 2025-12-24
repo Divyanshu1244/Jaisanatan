@@ -3,6 +3,7 @@ import logging
 import pymongo
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram.error import BadRequest  # Import for specific error handling
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -69,9 +70,21 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
     user_id = user.id
     last_media_id = media_id  # Store for testing
     try:
-        pub_member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
-        priv_member = await context.bot.get_chat_member(PRIVATE_CHANNEL, user_id)
-        if pub_member.status in ['member', 'administrator', 'creator'] and priv_member.status in ['member', 'administrator', 'creator', 'left']:
+        # Check membership with error handling
+        is_member = False
+        try:
+            pub_member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
+            priv_member = await context.bot.get_chat_member(PRIVATE_CHANNEL, user_id)
+            if pub_member.status in ['member', 'administrator', 'creator'] and priv_member.status in ['member', 'administrator', 'creator', 'left']:
+                is_member = True
+        except BadRequest as e:
+            logger.error(f"Membership check failed (likely bot not admin): {e}. Treating user as not a member.")
+            is_member = False  # Fallback: assume not a member
+        except Exception as e:
+            logger.error(f"Unexpected error in membership check: {e}. Treating user as not a member.")
+            is_member = False
+
+        if is_member:
             files = get_data(media_id)
             if not files:
                 await update.message.reply_text("❌ No media found for this link.")
@@ -120,8 +133,8 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 }
             )
     except Exception as e:
-        logger.error(f"Subscription check error: {e}")
-        await update.message.reply_text("❌ An error occurred. Please try again.")
+        logger.error(f"Unexpected error in handle_link_access: {e}")
+        await update.message.reply_text("❌ An unexpected error occurred. Please try again.")
 
 # /testdelete command (admin only, for testing)
 async def testdelete(update: Update, context: ContextTypes.DEFAULT_TYPE):
