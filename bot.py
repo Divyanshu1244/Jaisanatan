@@ -97,9 +97,9 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
                     sent_msgs.append(m.message_id)
             note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
             sent_msgs.append(note.message_id)
-            # Schedule deletion after 30 minutes (1800 seconds)
-            context.job_queue.run_once(delete_messages_job, 1800, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
-            logger.info(f"Scheduled deletion for user {user_id}, media_id {media_id}")
+            # TEMP: Set to 10 seconds for testing; change to 1800 for production
+            context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
+            logger.info(f"Scheduled deletion for user {user_id}, media_id {media_id}, messages: {sent_msgs}")
         else:
             await update.message.reply_text(
                 "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
@@ -197,11 +197,14 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
     user_id = data.get("user_id")
     msg_ids = data.get("message_ids", [])
     media_id = data.get("media_id")
-    logger.info(f"Starting deletion for user {user_id}, media_id {media_id}")
+    logger.info(f"Starting deletion for user {user_id}, media_id {media_id}, messages to delete: {msg_ids}")
+    if not msg_ids:
+        logger.warning(f"No messages to delete for user {user_id}")
+        return
     for mid in msg_ids:
         try:
             await context.bot.delete_message(chat_id=user_id, message_id=mid)
-            logger.info(f"Deleted message {mid} for user {user_id}")
+            logger.info(f"Successfully deleted message {mid} for user {user_id}")
         except Exception as e:
             logger.error(f"Failed to delete message {mid} for user {user_id}: {e}")
     try:
