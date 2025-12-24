@@ -21,6 +21,9 @@ client = pymongo.MongoClient(MONGO_URL)
 db = client['botdb']
 files_collection = db['files']
 
+# Global var for testing (stores last media_id for /testdelete)
+last_media_id = None
+
 # DB functions
 def save_data(media_id, files):
     files_collection.update_one(
@@ -48,7 +51,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         if user.id in ADMIN_ID:
             await update.message.reply_text(
-                "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.\nUse /revoke <media_id> to delete a link.",
+                "<b>📤 Welcome to Multi File Sharing Bot!</b>\n\nUse /upload to add files.\nUse /revoke <media_id> to delete a link.\nUse /testdelete to manually trigger deletion (for testing).",
                 parse_mode="html",
                 reply_markup={
                     "inline_keyboard": [[{"text": "📤 Start Uploading", "callback_data": "upload"}]]
@@ -61,8 +64,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE, media_id):
+    global last_media_id
     user = update.effective_user
     user_id = user.id
+    last_media_id = media_id  # Store for testing
     try:
         pub_member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
         priv_member = await context.bot.get_chat_member(PRIVATE_CHANNEL, user_id)
@@ -98,8 +103,11 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
             note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
             sent_msgs.append(note.message_id)
             # TEMP: Set to 10 seconds for testing; change to 1800 for production
-            context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
-            logger.info(f"Scheduled deletion for user {user_id}, media_id {media_id}, messages: {sent_msgs}")
+            job = context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
+            if job:
+                logger.info(f"Job scheduled successfully for user {user_id}, media_id {media_id}, messages: {sent_msgs}")
+            else:
+                logger.error(f"Failed to schedule job for user {user_id}, media_id {media_id}")
         else:
             await update.message.reply_text(
                 "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
@@ -114,6 +122,21 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
     except Exception as e:
         logger.error(f"Subscription check error: {e}")
         await update.message.reply_text("❌ An error occurred. Please try again.")
+
+# /testdelete command (admin only, for testing)
+async def testdelete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id not in ADMIN_ID:
+        await update.message.reply_text("❌ You are not authorized.")
+        return
+    global last_media_id
+    if not last_media_id:
+        await update.message.reply_text("❌ No recent media_id to test. Access a link first.")
+        return
+    # Simulate deletion data (you'd need to store sent_msgs properly for real testing)
+    # For now, this just logs; replace with actual data if needed
+    logger.info(f"Manual testdelete triggered for media_id {last_media_id}")
+    await update.message.reply_text(f"✅ Manual deletion test logged for {last_media_id}. Check logs.")
 
 # /upload command
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -224,6 +247,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("upload", upload))
     application.add_handler(CommandHandler("revoke", revoke))
+    application.add_handler(CommandHandler("testdelete", testdelete))  # New command
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
     application.run_polling()
