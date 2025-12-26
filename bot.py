@@ -4,13 +4,13 @@ import pymongo
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    filters, ContextTypes, CallbackQueryHandler
+    filters, ContextTypes
 )
 from telegram.error import BadRequest, Forbidden
 
 # ================= LOGGING =================
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
@@ -21,8 +21,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = [6335046711, 8552084416]
 
 PUBLIC_CHANNEL = "-1003582278269"
-PRIVATE_CHANNEL = "-1003440235355"  # optional
-PRIVATE_INVITE_LINK = "https://t.me/+FkReusMf7r44Nzhl"
 MAIN_CHANNEL_LINK = "https://t.me/+_FVPR7qaQuRhYmY1"
 
 # ================= MONGODB =================
@@ -51,7 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     params = " ".join(context.args) if context.args else None
 
-    if params and not params.startswith("joined_"):
+    if params:
         await handle_link_access(update, context, params)
         return
 
@@ -59,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "<b>📤 Admin Panel</b>\n\n"
             "/upload – Upload files\n"
-            "/revoke <media_id> – Delete link\n",
+            "/revoke &lt;media_id&gt; – Delete link\n",
             parse_mode="HTML"
         )
     else:
@@ -71,14 +69,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ================= LINK ACCESS =================
 async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE, media_id):
-    user = update.effective_user
-    user_id = user.id
+    user_id = update.effective_user.id
 
-    # ----- FORCE JOIN (PUBLIC) -----
+    # ----- FORCE JOIN -----
     try:
         member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
         if member.status not in ("member", "administrator", "creator"):
-            raise Exception("Not member")
+            raise Exception
     except Exception:
         await update.message.reply_text(
             "🚫 Pehle channel join kar!",
@@ -120,7 +117,7 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
     note = await update.message.reply_text("⚠️ Files 30 min baad delete ho jayengi.")
     sent_ids.append(note.message_id)
 
-    # 🔥 DELETE JOB (30 min = 1800 sec)
+    # ⏱ AUTO DELETE (30 min)
     context.job_queue.run_once(
         delete_messages_job,
         1800,
@@ -137,12 +134,11 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.delete_message(chat_id=user_id, message_id=mid)
         except Forbidden:
-            logger.warning(f"Bot blocked by {user_id}")
             break
-        except BadRequest as e:
-            logger.warning(f"BadRequest delete {mid}: {e}")
+        except BadRequest:
+            pass
         except Exception as e:
-            logger.error(f"Delete error {mid}: {e}")
+            logger.error(e)
 
 # ================= UPLOAD =================
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -214,9 +210,6 @@ async def revoke(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ================= MAIN =================
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
-    # 🔥 VERY IMPORTANT
-    app.job_queue.start()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("upload", upload))
