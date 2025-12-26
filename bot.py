@@ -69,72 +69,79 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
     user = update.effective_user
     user_id = user.id
     last_media_id = media_id  # Store for testing
+    
+    # Check membership for PUBLIC_CHANNEL only (strict)
+    is_member = False
     try:
-        # Check membership with error handling
+        pub_member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
+        if pub_member.status in ['member', 'administrator', 'creator']:
+            is_member = True
+    except BadRequest as e:
+        logger.error(f"Membership check failed for public channel (likely bot not admin): {e}. Treating user as not a member.")
         is_member = False
-        try:
-            pub_member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
-            priv_member = await context.bot.get_chat_member(PRIVATE_CHANNEL, user_id)
-            if pub_member.status in ['member', 'administrator', 'creator'] and priv_member.status in ['member', 'administrator', 'creator', 'left']:
-                is_member = True
-        except BadRequest as e:
-            logger.error(f"Membership check failed (likely bot not admin): {e}. Treating user as not a member.")
-            is_member = False  # Fallback: assume not a member
-        except Exception as e:
-            logger.error(f"Unexpected error in membership check: {e}. Treating user as not a member.")
-            is_member = False
-
-        if is_member:
-            files = get_data(media_id)
-            if not files:
-                await update.message.reply_text("❌ No media found for this link.")
-                return
-            username = f"@{user.username}" if user.username else "No username"
-            await context.bot.send_message(
-                chat_id=6335046711,
-                text=f"🔗 Link opened\n{user.first_name}\n👤 {user_id}\n{username}"
-            )
-            sent_msgs = []
-            for f in files:
-                m = None
-                if f["type"] == "photo":
-                    m = await context.bot.send_photo(chat_id=user.id, photo=f["file_id"], caption=f.get("caption", ""), protect_content=True)
-                elif f["type"] == "video":
-                    m = await context.bot.send_video(chat_id=user.id, video=f["file_id"], caption=f.get("caption", ""), protect_content=True)
-                elif f["type"] == "audio":
-                    m = await context.bot.send_audio(chat_id=user.id, audio=f["file_id"], protect_content=True)
-                elif f["type"] == "voice":
-                    m = await context.bot.send_voice(chat_id=user.id, voice=f["file_id"], protect_content=True)
-                elif f["type"] == "document":
-                    m = await context.bot.send_document(chat_id=user.id, document=f["file_id"], protect_content=True)
-                elif f["type"] == "animation":
-                    m = await context.bot.send_animation(chat_id=user.id, animation=f["file_id"], protect_content=True)
-                elif f["type"] == "sticker":
-                    m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
-                if m and hasattr(m, 'message_id'):
-                    sent_msgs.append(m.message_id)
-            note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
-            sent_msgs.append(note.message_id)
-            # TEMP: Set to 10 seconds for testing; change to 1800 for production
-            job = context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
-            if job:
-                logger.info(f"Job scheduled successfully for user {user_id}, media_id {media_id}, messages: {sent_msgs}")
-            else:
-                logger.error(f"Failed to schedule job for user {user_id}, media_id {media_id}")
-        else:
-            await update.message.reply_text(
-                "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
-                reply_markup={
-                    "inline_keyboard": [
-                        [{"text": "📢 Join Channel", "url": MAIN_CHANNEL_LINK}],
-                        [{"text": "📢 Join Channel ", "url": PRIVATE_INVITE_LINK}],
-                        [{"text": "🌹 I Joined", "url": f"https://t.me/{(await context.bot.get_me()).username}?start=joined_{media_id}"}]
-                    ]
-                }
-            )
     except Exception as e:
-        logger.error(f"Unexpected error in handle_link_access: {e}")
-        await update.message.reply_text("❌ An unexpected error occurred. Please try again.")
+        logger.error(f"Unexpected error in public check: {e}")
+        is_member = False
+    
+    if not is_member:
+        # Block and prompt for public channel join
+        await update.message.reply_text(
+            "🚫 Phele channel Join to karle babu!\n\nFriends ko bhi refer kar diyo 😋",
+            reply_markup={
+                "inline_keyboard": [
+                    [{"text": "📢 Join Channel", "url": MAIN_CHANNEL_LINK}],
+                    [{"text": "🌹 I Joined", "url": f"https://t.me/{(await context.bot.get_me()).username}?start=joined_{media_id}"}]
+                ]
+            }
+        )
+        return
+    
+    # Bypass check for PRIVATE_CHANNEL: Send request prompt but don't block
+    await update.message.reply_text(
+        "📢 Optional: Send a join request to our backup channel for updates! (You can continue using the bot now.)",
+        reply_markup={
+            "inline_keyboard": [[{"text": "📢 Send Request", "url": PRIVATE_INVITE_LINK}]]
+        }
+    )
+    
+    # Proceed with file access (no blocking for private channel)
+    files = get_data(media_id)
+    if not files:
+        await update.message.reply_text("❌ No media found for this link.")
+        return
+    
+    username = f"@{user.username}" if user.username else "No username"
+    await context.bot.send_message(
+        chat_id=6335046711,
+        text=f"🔗 Link opened\n{user.first_name}\n👤 {user_id}\n{username}"
+    )
+    sent_msgs = []
+    for f in files:
+        m = None
+        if f["type"] == "photo":
+            m = await context.bot.send_photo(chat_id=user.id, photo=f["file_id"], caption=f.get("caption", ""), protect_content=True)
+        elif f["type"] == "video":
+            m = await context.bot.send_video(chat_id=user.id, video=f["file_id"], caption=f.get("caption", ""), protect_content=True)
+        elif f["type"] == "audio":
+            m = await context.bot.send_audio(chat_id=user.id, audio=f["file_id"], protect_content=True)
+        elif f["type"] == "voice":
+            m = await context.bot.send_voice(chat_id=user.id, voice=f["file_id"], protect_content=True)
+        elif f["type"] == "document":
+            m = await context.bot.send_document(chat_id=user.id, document=f["file_id"], protect_content=True)
+        elif f["type"] == "animation":
+            m = await context.bot.send_animation(chat_id=user.id, animation=f["file_id"], protect_content=True)
+        elif f["type"] == "sticker":
+            m = await context.bot.send_sticker(chat_id=user.id, sticker=f["file_id"], protect_content=True)
+        if m and hasattr(m, 'message_id'):
+            sent_msgs.append(m.message_id)
+    note = await update.message.reply_text("⚠️ Note: Files will be deleted after 30 minutes.", parse_mode=None)
+    sent_msgs.append(note.message_id)
+    # TEMP: Set to 10 seconds for testing; change to 1800 for production
+    job = context.job_queue.run_once(delete_messages_job, 10, data={"user_id": user.id, "message_ids": sent_msgs, "media_id": media_id})
+    if job:
+        logger.info(f"Job scheduled successfully for user {user_id}, media_id {media_id}, messages: {sent_msgs}")
+    else:
+        logger.error(f"Failed to schedule job for user {user_id}, media_id {media_id}")
 
 # /testdelete command (admin only, for testing)
 async def testdelete(update: Update, context: ContextTypes.DEFAULT_TYPE):
