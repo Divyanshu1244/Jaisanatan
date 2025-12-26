@@ -234,22 +234,24 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("❌ Unsupported input. Please send media files only.")
 
-# Delete messages job
 async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_id = data.get("user_id")
     msg_ids = data.get("message_ids", [])
     media_id = data.get("media_id")
+    
     logger.info(f"Starting deletion for user {user_id}, media_id {media_id}, messages to delete: {msg_ids}")
-    if not msg_ids:
-        logger.warning(f"No messages to delete for user {user_id}")
-        return
+    
+    # Delete all sent messages (ignore errors if user blocked bot)
     for mid in msg_ids:
         try:
             await context.bot.delete_message(chat_id=user_id, message_id=mid)
             logger.info(f"Successfully deleted message {mid} for user {user_id}")
         except Exception as e:
             logger.error(f"Failed to delete message {mid} for user {user_id}: {e}")
+            pass  # Ignore if bot is blocked or other errors
+    
+    # Notify user with channel link (only if not blocked)
     try:
         await context.bot.send_message(
             chat_id=user_id,
@@ -261,6 +263,7 @@ async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Sent follow-up message to user {user_id}")
     except Exception as e:
         logger.error(f"Failed to send follow-up to user {user_id}: {e}")
+        pass  # If user blocked bot, skip sending message
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
