@@ -4,7 +4,7 @@ import pymongo
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    filters, ContextTypes
+    ContextTypes, filters
 )
 from telegram.error import BadRequest, Forbidden
 
@@ -25,24 +25,24 @@ MAIN_CHANNEL_LINK = "https://t.me/+_FVPR7qaQuRhYmY1"
 
 # ================= MONGODB =================
 MONGO_URL = "mongodb+srv://sanjublogscom_db_user:Mahakal456@cluster0.cwi48dt.mongodb.net/?appName=Cluster0"
-client = pymongo.MongoClient(MONGO_URL)
-db = client["botdb"]
-files_collection = db["files"]
+mongo = pymongo.MongoClient(MONGO_URL)
+db = mongo["botdb"]
+files_col = db["files"]
 
-# ================= DB HELPERS =================
+# ================= DB FUNCTIONS =================
 def save_data(media_id, files):
-    files_collection.update_one(
+    files_col.update_one(
         {"media_id": media_id},
-        {"$set": {"media_id": media_id, "data": files}},
+        {"$set": {"media_id": media_id, "files": files}},
         upsert=True
     )
 
 def get_data(media_id):
-    r = files_collection.find_one({"media_id": media_id})
-    return r["data"] if r else None
+    d = files_col.find_one({"media_id": media_id})
+    return d["files"] if d else None
 
 def delete_data(media_id):
-    files_collection.delete_one({"media_id": media_id})
+    files_col.delete_one({"media_id": media_id})
 
 # ================= START =================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,28 +50,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     params = " ".join(context.args) if context.args else None
 
     if params:
-        await handle_link_access(update, context, params)
+        await handle_link(update, context, params)
         return
 
     if user.id in ADMIN_ID:
         await update.message.reply_text(
             "<b>📤 Admin Panel</b>\n\n"
             "/upload – Upload files\n"
-            "/revoke &lt;media_id&gt; – Delete link\n",
+            "/revoke &lt;media_id&gt; – Delete link",
             parse_mode="HTML"
         )
     else:
         await update.message.reply_text(
-            "<b>Dude channel vali link use kar👇\n"
+            "<b>Use channel link to access files 👇\n"
             "Channel: t.me/+_FVPR7qaQuRhYmY1</b>",
             parse_mode="HTML"
         )
 
 # ================= LINK ACCESS =================
-async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE, media_id):
+async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE, media_id):
     user_id = update.effective_user.id
 
-    # ----- FORCE JOIN -----
+    # FORCE JOIN CHECK
     try:
         member = await context.bot.get_chat_member(PUBLIC_CHANNEL, user_id)
         if member.status not in ("member", "administrator", "creator"):
@@ -114,29 +114,27 @@ async def handle_link_access(update: Update, context: ContextTypes.DEFAULT_TYPE,
         if m:
             sent_ids.append(m.message_id)
 
-    note = await update.message.reply_text("⚠️ Files 30 min baad delete ho jayengi.")
+    note = await update.message.reply_text("⚠️ Files 30 min baad auto delete ho jayengi.")
     sent_ids.append(note.message_id)
 
-    # ⏱ AUTO DELETE (30 min)
+    # AUTO DELETE (30 min)
     context.job_queue.run_once(
-        delete_messages_job,
+        delete_job,
         1800,
-        data={"user_id": user_id, "message_ids": sent_ids}
+        data={"user_id": user_id, "msg_ids": sent_ids}
     )
 
 # ================= DELETE JOB =================
-async def delete_messages_job(context: ContextTypes.DEFAULT_TYPE):
+async def delete_job(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_id = data["user_id"]
-    msg_ids = data["message_ids"]
+    msg_ids = data["msg_ids"]
 
     for mid in msg_ids:
         try:
-            await context.bot.delete_message(chat_id=user_id, message_id=mid)
-        except Forbidden:
+            await context.bot.delete_message(user_id, mid)
+        except (BadRequest, Forbidden):
             break
-        except BadRequest:
-            pass
         except Exception as e:
             logger.error(e)
 
@@ -155,8 +153,8 @@ async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardMarkup([["✅"]], resize_keyboard=True)
     )
 
-# ================= HANDLE MEDIA =================
-async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ================= MEDIA HANDLER =================
+async def media_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_ID:
         return
 
@@ -167,7 +165,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_data(media_id, files)
         link = f"https://t.me/{(await context.bot.get_me()).username}?start={media_id}"
         await update.message.reply_text(
-            f"✅ Done\n{link}",
+            f"✅ Upload Done\n{link}",
             reply_markup=ReplyKeyboardRemove()
         )
         context.user_data.clear()
@@ -203,7 +201,6 @@ async def revoke(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: /revoke <media_id>")
         return
-
     delete_data(context.args[0])
     await update.message.reply_text("✅ Link revoked")
 
@@ -214,7 +211,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("upload", upload))
     app.add_handler(CommandHandler("revoke", revoke))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_media))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, media_handler))
 
     app.run_polling()
 
